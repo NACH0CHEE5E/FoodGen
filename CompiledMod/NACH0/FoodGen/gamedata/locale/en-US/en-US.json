@@ -1,0 +1,8 @@
+{
+	"types": {
+		"NACH0.Types.FoodGen": "Food Generation"
+	},
+	"typeuses": {
+		"NACH0.Types.FoodGen": "left click to open UI, Displays your total food gain/loss"
+	}
+}

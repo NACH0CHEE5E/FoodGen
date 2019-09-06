@@ -1,0 +1,10 @@
+[
+	{
+		"name": "NACH0.Player.FoodGen",
+		"requires": [
+		],
+		"results": [{
+			"type": "NACH0.Types.FoodGen"
+		}]
+	}
+]
