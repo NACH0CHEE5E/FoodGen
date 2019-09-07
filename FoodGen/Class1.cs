@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Pipliz;
 using Pipliz.JSON;
 using Recipes;
@@ -37,6 +38,7 @@ namespace FoodGen
         public static Dictionary<string, Dictionary<string, int>> FoodValues = new Dictionary<string, Dictionary<string, int>>();
         //public static Dictionary<string, int> Settings = new Dictionary<string, int>();
         static bool WasDay = false;
+        static int day = 0;
 
         [ModLoader.ModCallback(ModLoader.EModCallbackType.OnAssemblyLoaded, MODNAMESPACE + "OnAssemblyLoaded")]
         public static void OnAssemblyLoaded(string path)
@@ -59,6 +61,7 @@ namespace FoodGen
         [ModLoader.ModCallback(ModLoader.EModCallbackType.AfterWorldLoad, MODNAMESPACE + "AfterWorldLoad")]
         public static void AfterWorldLoad()
         {
+            day = Pipliz.Math.RoundToInt(System.Math.Floor(TimeCycle.TotalHours / 24));
             if (TimeCycle.IsDay)
             {
                 WasDay = true;
@@ -67,7 +70,7 @@ namespace FoodGen
             {
                 File.Create(FILE_PATH);
                 //FoodValues.Add("default", "0", 0)
-                
+
             }
             else
             {
@@ -81,37 +84,50 @@ namespace FoodGen
         [ModLoader.ModCallback(ModLoader.EModCallbackType.OnUpdate, MODNAMESPACE + "OnUpdate")]
         public static void OnUpdate()
         {
-            if (TimeCycle.IsDay)
+            if (!WasDay && TimeCycle.IsDay)
             {
                 WasDay = true;
+                day = Pipliz.Math.RoundToInt(System.Math.Floor(TimeCycle.TotalHours / 24));
                 return;
             }
             else if (WasDay && !TimeCycle.IsDay)
             {
+                day = Pipliz.Math.RoundToInt(System.Math.Floor(TimeCycle.TotalHours / 24));
                 foreach (Colony colony in ServerManager.ColonyTracker.ColoniesByID.Values)
                 {
                     if (!FoodValues.ContainsKey(colony.ColonyID.ToString()))
                     {
                         FoodValues[colony.ColonyID.ToString()] = new Dictionary<string, int>();
                     }
-                    FoodValues[colony.ColonyID.ToString()].Add(Pipliz.Math.RoundToInt(TimeCycle.TotalHours / 24).ToString(), Pipliz.Math.RoundToInt(colony.Stockpile.TotalFood));
-                    foreach (var dict in FoodValues)
+                    if (!FoodValues[colony.ColonyID.ToString()].ContainsKey(day.ToString()))
                     {
-                        int key = Int32.Parse(dict.Key);
-                        if (key < TimeCycle.TotalHours / 24 - 10)
+                        FoodValues[colony.ColonyID.ToString()].Add(day.ToString(), Pipliz.Math.RoundToInt(colony.Stockpile.TotalFood));
+                    }
+                    List<string> keysToRemove = new List<string>();
+                    foreach (var dict in FoodValues[colony.ColonyID.ToString()])
+                    {
+                        if (Int32.Parse(dict.Key) < day - 10)
                         {
-                            FoodValues.Remove(dict.Key);
+                            keysToRemove.Add(dict.Key);
                         }
                     }
+                    foreach (var key in keysToRemove)
+                    {
+                        FoodValues[colony.ColonyID.ToString()].Remove(key);
+                    }
                 }
-
                 WasDay = false;
-                return;
             }
-            return;
         }
         [ModLoader.ModCallback(ModLoader.EModCallbackType.OnAutoSaveWorld, MODNAMESPACE + "OnAutoSaveWorld")]
         public static void OnAutoSaveWorld()
+        {
+            var food = JsonConvert.SerializeObject(FoodValues, Formatting.Indented);
+            File.WriteAllText(FILE_PATH, food);
+            return;
+        }
+        [ModLoader.ModCallback(ModLoader.EModCallbackType.OnSaveWorldMisc, MODNAMESPACE + "OnSaveWorldMisc")]
+        public static void OnSaveWorldMisc(JObject j)
         {
             var food = JsonConvert.SerializeObject(FoodValues, Formatting.Indented);
             File.WriteAllText(FILE_PATH, food);
@@ -131,7 +147,7 @@ namespace FoodGen
         public static void SendUI(Players.Player player)
         {
             NetworkMenu FoodUI = new NetworkMenu();
-            FoodUI.Identifier = "CommandToolUI";
+            FoodUI.Identifier = "FoodGenUI";
             FoodUI.LocalStorage.SetAs("header", "Food Generation Stats");
             FoodUI.Width = 600;
             FoodUI.Height = 200;
@@ -148,57 +164,51 @@ namespace FoodGen
             HorizontalRow HorizontalLabelRow1 = new HorizontalRow(LabelRow1);
 
             FoodUI.Items.Add(HorizontalLabelRow1);
-            
+
             string changeFromYesterdayAmount = "No data";
             string changeFrom5DaysAmount = "No data";
             if (FoodValues.ContainsKey(player.ActiveColony.ColonyID.ToString()))
             {
-                int todayAmount = -1;
+                int todayAmount = Pipliz.Math.RoundToInt(player.ActiveColony.Stockpile.TotalFood);
                 int yesterdayAmount = -1;
                 int days5AgoAmount = -1;
-                Dictionary<string, int> foodAmounts = FoodValues[player.ActiveColony.ColonyID.ToString()];
-                if (foodAmounts.ContainsKey(Pipliz.Math.RoundToInt(System.Math.Floor(TimeCycle.TotalHours / 24)).ToString()))
+
+                if (FoodValues[player.ActiveColony.ColonyID.ToString()].ContainsKey((day - 1).ToString()))
                 {
-                    todayAmount = foodAmounts[Pipliz.Math.RoundToInt(System.Math.Floor(TimeCycle.TotalHours / 24)).ToString()];
+                    yesterdayAmount = FoodValues[player.ActiveColony.ColonyID.ToString()][(day - 1).ToString()];
                 }
-                if (foodAmounts.ContainsKey(Pipliz.Math.RoundToInt(System.Math.Floor(TimeCycle.TotalHours / 24 - 1)).ToString()))
+                if (FoodValues[player.ActiveColony.ColonyID.ToString()].ContainsKey((day - 5).ToString()))
                 {
-                    yesterdayAmount = foodAmounts[Pipliz.Math.RoundToInt(System.Math.Floor(TimeCycle.TotalHours / 24 - 1)).ToString()];
+                    days5AgoAmount = FoodValues[player.ActiveColony.ColonyID.ToString()][(day - 5).ToString()];
                 }
-                if (foodAmounts.ContainsKey(Pipliz.Math.RoundToInt(System.Math.Floor(TimeCycle.TotalHours / 24 - 5)).ToString()))
+                if (yesterdayAmount != -1)
                 {
-                    days5AgoAmount = foodAmounts[Pipliz.Math.RoundToInt(System.Math.Floor(TimeCycle.TotalHours / 24 - 5)).ToString()];
-                }
-                if (todayAmount != -1)
-                {
-                    if (yesterdayAmount != -1)
+                    int amountYesterday = (todayAmount - yesterdayAmount) * 2000;
+                    if (amountYesterday >= 10000 || amountYesterday <= -10000)
                     {
-                        int amountYesterday = (todayAmount - yesterdayAmount) * 2000;
-                        if (amountYesterday >= 10000 || amountYesterday <= -10000)
-                        {
-                            amountYesterday = amountYesterday / 1000;
-                            changeFromYesterdayAmount = String.Format("{0:n0}", amountYesterday) + "K cals";
-                        }
-                        else
-                        {
-                            changeFromYesterdayAmount = String.Format("{0:n0}", amountYesterday) + " cals";
-                        }
+                        amountYesterday = amountYesterday / 1000;
+                        changeFromYesterdayAmount = String.Format("{0:n0}", amountYesterday) + "K cals";
                     }
-                    if (days5AgoAmount != -1)
+                    else
                     {
-                        int amount5days = (todayAmount - days5AgoAmount) * 2000 / 5;
-                        if (amount5days >= 10000 || amount5days <= -10000)
-                        {
-                            amount5days = amount5days / 1000;
-                            changeFrom5DaysAmount = String.Format("{0:n0}", amount5days) + "K cals";
-                        }
-                        else
-                        {
-                            changeFrom5DaysAmount = String.Format("{0:n0}", amount5days) + " cals";
-                        }
+                        changeFromYesterdayAmount = String.Format("{0:n0}", amountYesterday) + " cals";
                     }
                 }
-                
+                if (days5AgoAmount != -1)
+                {
+                    int amount5days = (todayAmount - days5AgoAmount) * 2000 / 5;
+                    if (amount5days >= 10000 || amount5days <= -10000)
+                    {
+                        amount5days = amount5days / 1000;
+                        changeFrom5DaysAmount = String.Format("{0:n0}", amount5days) + "K cals";
+                    }
+                    else
+                    {
+                        changeFrom5DaysAmount = String.Format("{0:n0}", amount5days) + " cals";
+                    }
+                }
+
+
             }
 
 

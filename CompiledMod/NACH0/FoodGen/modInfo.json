@@ -1,7 +1,7 @@
 [
   {
     "name": "NACH0.FoodGen",
-    "version": "0.1.0",
+    "version": "0.1.3",
     "namepretty": "NACH0's Food Gen",
     "enabled": true,
     "marksgamemodded": true,
@@ -27,7 +27,7 @@
       }
     ],
     "patchnotes": [
-      {
+		{
         "version": "0.1.0",
         "notes": [
           "Initial Release",
